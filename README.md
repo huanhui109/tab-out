@@ -35,7 +35,29 @@ The agent will walk you through it. Takes about 1 minute.
 
 ---
 
-## New Features (v1.1.0)
+## New Features (v1.2.0)
+
+### Enhanced Search
+- **Fuzzy Search** - Search tabs by title or URL with case-insensitive and fuzzy matching
+- Real-time filtering as you type
+
+### Recently Closed
+- Automatically saves closed tabs for quick recovery
+- One-click restore functionality
+- Shows last 20 closed tabs
+
+### Tab Preview
+- Hover over any tab to see preview with favicon and title
+- Smart positioning to stay within viewport
+
+### Usage Statistics (Toggleable)
+- Track total tabs opened and domains visited
+- Top 10 most visited sites ranking
+- Enable/disable from the stats icon
+
+### Pomodoro Timer (Toggleable)
+- Focus mode (25 min), Short break (5 min), Long break (15 min)
+- Session counter for today's completed focus sessions
 
 ### Background Themes
 - **Bing Wallpaper** - Daily automatic wallpaper from Bing with navigation to browse recent 8 images

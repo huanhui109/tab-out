@@ -61,6 +61,29 @@ const i18n = {
     bgApplied: 'Background applied',
     bingPrev: 'Previous',
     bingNext: 'Next',
+    searchTabs: 'Search tabs...',
+    recentlyClosed: 'Recently closed',
+    clearRecent: 'Clear',
+    restore: 'Restore',
+    noRecentTabs: 'No recently closed tabs',
+    stats: 'Statistics',
+    totalTabsOpened: 'Total tabs opened',
+    totalDomains: 'Total domains',
+    topSites: 'Top sites',
+    noData: 'No data yet',
+    pomodoro: 'Pomodoro',
+    focus: 'Focus',
+    shortBreak: 'Short break',
+    longBreak: 'Long break',
+    start: 'Start',
+    reset: 'Reset',
+    sessionsCompleted: 'Sessions today',
+    tabAge: 'Open for',
+    pinned: 'Pinned',
+    unpin: 'Unpin',
+    enableStats: 'Enable statistics',
+    enableTabAge: 'Show tab age',
+    enablePinned: 'Enable pinned tabs',
   },
   zh: {
     greetingMorning: '早上好',
@@ -102,6 +125,29 @@ const i18n = {
     bgApplied: '背景已应用',
     bingPrev: '上一张',
     bingNext: '下一张',
+    searchTabs: '搜索标签页...',
+    recentlyClosed: '最近关闭',
+    clearRecent: '清空',
+    restore: '恢复',
+    noRecentTabs: '没有最近关闭的标签页',
+    stats: '使用统计',
+    totalTabsOpened: '总共打开标签页',
+    totalDomains: '访问域名数',
+    topSites: '最常访问',
+    noData: '暂无数据',
+    pomodoro: '番茄钟',
+    focus: '专注',
+    shortBreak: '短休息',
+    longBreak: '长休息',
+    start: '开始',
+    reset: '重置',
+    sessionsCompleted: '今日完成',
+    tabAge: '已打开',
+    pinned: '已固定',
+    unpin: '取消固定',
+    enableStats: '启用统计',
+    enableTabAge: '显示标签页打开时长',
+    enablePinned: '启用固定标签',
   }
 };
 
@@ -110,6 +156,29 @@ let bgMode = 'none';
 let customBgData = null;
 let bingImages = [];
 let currentBingIndex = 0;
+
+let searchQuery = '';
+let filteredTabs = [];
+let recentlyClosedTabs = [];
+let enableStats = false;
+let enableTabAge = false;
+let enablePinned = false;
+let domainStats = {};
+let totalTabsOpened = 0;
+let pinnedTabs = new Set();
+
+let pomodoroMode = 'work';
+let pomodoroTimeLeft = 25 * 60;
+let pomodoroInterval = null;
+let pomodoroRunning = false;
+let pomodoroSessions = 0;
+let pomodoroStartTime = null;
+
+const POMODORO_TIMES = {
+  work: 25 * 60,
+  short: 5 * 60,
+  long: 15 * 60
+};
 
 function t(key) {
   return i18n[currentLang][key] || key;
@@ -162,6 +231,47 @@ function updateBingNavInfo() {
   }
   if (nextBtn) {
     nextBtn.classList.toggle('disabled', currentBingIndex >= bingImages.length - 1);
+  }
+}
+
+async function loadFeatureSettings() {
+  try {
+    const settings = await chrome.storage.local.get(['enableStats', 'enableTabAge', 'enablePinned', 'domainStats', 'totalTabsOpened', 'recentlyClosedTabs', 'pomodoroSessions', 'pinnedTabs']);
+    enableStats = settings.enableStats || false;
+    enableTabAge = settings.enableTabAge || false;
+    enablePinned = settings.enablePinned || false;
+    domainStats = settings.domainStats || {};
+    totalTabsOpened = settings.totalTabsOpened || 0;
+    recentlyClosedTabs = settings.recentlyClosedTabs || [];
+    pomodoroSessions = settings.pomodoroSessions || 0;
+    pinnedTabs = new Set(settings.pinnedTabs || []);
+  } catch {}
+}
+
+async function saveFeatureSettings() {
+  try {
+    await chrome.storage.local.set({
+      enableStats,
+      enableTabAge,
+      enablePinned,
+      domainStats,
+      totalTabsOpened,
+      recentlyClosedTabs,
+      pomodoroSessions,
+      pinnedTabs: Array.from(pinnedTabs)
+    });
+  } catch {}
+}
+
+function updateFeatureToggles() {
+  document.getElementById('statsToggle')?.classList.toggle('active', enableStats);
+  document.getElementById('pomodoroToggle')?.classList.toggle('active', pomodoroSessions > 0 || pomodoroTimeLeft !== POMODORO_TIMES.work);
+}
+
+function updateSearchPlaceholder() {
+  const searchInput = document.getElementById('tabSearch');
+  if (searchInput) {
+    searchInput.placeholder = t('searchTabs');
   }
 }
 
@@ -374,7 +484,6 @@ let openTabs = [];
 async function fetchOpenTabs() {
   try {
     const extensionId = chrome.runtime.id;
-    // The new URL for this page is now index.html (not newtab.html)
     const newtabUrl = `chrome-extension://${extensionId}/index.html`;
 
     const tabs = await chrome.tabs.query({});
@@ -384,11 +493,22 @@ async function fetchOpenTabs() {
       title:    t.title,
       windowId: t.windowId,
       active:   t.active,
-      // Flag Tab Out's own pages so we can detect duplicate new tabs
       isTabOut: t.url === newtabUrl || t.url === 'chrome://newtab/',
     }));
+    
+    if (enableStats) {
+      for (const tab of openTabs) {
+        if (tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('about:')) {
+          try {
+            const domain = new URL(tab.url).hostname;
+            domainStats[domain] = (domainStats[domain] || 0) + 1;
+            totalTabsOpened++;
+          } catch {}
+        }
+      }
+      await saveFeatureSettings();
+    }
   } catch {
-    // chrome.tabs API unavailable (shouldn't happen in an extension page)
     openTabs = [];
   }
 }
@@ -779,6 +899,156 @@ function showToast(message) {
   document.getElementById('toastText').textContent = message;
   toast.classList.add('visible');
   setTimeout(() => toast.classList.remove('visible'), 2500);
+}
+
+function updatePomodoroDisplay() {
+  const timerEl = document.getElementById('pomodoroTimer');
+  const sessionsEl = document.getElementById('sessionsCount');
+  const startBtn = document.getElementById('pomodoroStart');
+  
+  if (timerEl) {
+    const mins = Math.floor(pomodoroTimeLeft / 60);
+    const secs = pomodoroTimeLeft % 60;
+    timerEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  
+  if (sessionsEl) {
+    sessionsEl.textContent = `${t('sessionsCompleted')}: ${pomodoroSessions}`;
+  }
+  
+  if (startBtn) {
+    startBtn.textContent = pomodoroRunning ? 'Pause' : t('start');
+  }
+  
+  document.querySelectorAll('.pomodoro-mode').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === pomodoroMode);
+  });
+}
+
+async function updateStats() {
+  const totalTabsEl = document.getElementById('totalTabsOpened');
+  const totalDomainsEl = document.getElementById('totalDomains');
+  const topSitesList = document.getElementById('topSitesList');
+  
+  if (totalTabsEl) totalTabsEl.textContent = totalTabsOpened;
+  if (totalDomainsEl) totalDomainsEl.textContent = Object.keys(domainStats).length;
+  
+  if (topSitesList) {
+    const sorted = Object.entries(domainStats)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10);
+    
+    if (sorted.length === 0) {
+      topSitesList.innerHTML = `<div class="top-site-item" style="color: var(--muted); font-size: 12px;">${t('noData')}</div>`;
+    } else {
+      topSitesList.innerHTML = sorted.map(([domain, count], i) => `
+        <div class="top-site-item">
+          <div class="top-site-rank">${i + 1}</div>
+          <div class="top-site-domain">${friendlyDomain(domain)}</div>
+          <div class="top-site-count">${count}</div>
+        </div>
+      `).join('');
+    }
+  }
+}
+
+async function renderRecentlyClosed() {
+  const container = document.getElementById('recentlyClosed');
+  const list = document.getElementById('recentlyClosedList');
+  
+  if (!container || !list) return;
+  
+  if (recentlyClosedTabs.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+  
+  container.style.display = 'block';
+  list.innerHTML = recentlyClosedTabs.slice(0, 10).map((tab, i) => `
+    <div class="recent-item" data-url="${tab.url}" data-index="${i}">
+      <div class="recent-item-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+          <polyline points="13 2 13 9 20 9"></polyline>
+        </svg>
+      </div>
+      <div class="recent-item-info">
+        <div class="recent-item-title">${smartTitle(tab.title || 'Untitled', tab.url)}</div>
+        <div class="recent-item-url">${new URL(tab.url).hostname}</div>
+      </div>
+      <button class="recent-item-restore" data-url="${tab.url}" data-index="${i}">${t('restore')}</button>
+    </div>
+  `).join('');
+}
+
+async function restoreClosedTab(url, index) {
+  try {
+    await chrome.tabs.create({ url });
+    recentlyClosedTabs.splice(index, 1);
+    await saveFeatureSettings();
+    renderRecentlyClosed();
+    showToast(t('saved'));
+  } catch (err) {
+    console.error('[tab-out] Failed to restore tab:', err);
+  }
+}
+
+function handleSearchInput(query) {
+  searchQuery = query.toLowerCase().trim();
+  const missionsEl = document.getElementById('openTabsMissions');
+  if (!missionsEl) return;
+  
+  if (!searchQuery) {
+    filteredTabs = [];
+    missionsEl.querySelectorAll('.mission-card').forEach(card => {
+      card.style.display = '';
+    });
+    return;
+  }
+  
+  missionsEl.querySelectorAll('.mission-card').forEach(card => {
+    const title = (card.querySelector('.mission-title')?.textContent || '').toLowerCase();
+    const url = (card.dataset.domainId || '').toLowerCase().replace(/domain-/g, '');
+    const chipTexts = Array.from(card.querySelectorAll('.chip-text')).map(el => el.textContent.toLowerCase()).join(' ');
+    
+    const fuzzyMatch = fuzzySearch(searchQuery, title + ' ' + chipTexts + ' ' + url);
+    const match = fuzzyMatch > 0;
+    card.style.display = match ? '' : 'none';
+    
+    if (match && fuzzyMatch > 3) {
+      const chips = card.querySelectorAll('.page-chip');
+      chips.forEach(chip => {
+        const chipText = chip.querySelector('.chip-text')?.textContent?.toLowerCase() || '';
+        if (fuzzySearch(searchQuery, chipText) > 0) {
+          chip.style.display = '';
+        } else {
+          chip.style.display = 'none';
+        }
+      });
+    }
+  });
+}
+
+function fuzzySearch(pattern, text) {
+  if (!pattern || !text) return 0;
+  pattern = pattern.toLowerCase();
+  text = text.toLowerCase();
+  
+  if (text.includes(pattern)) return 10;
+  
+  let patternIdx = 0;
+  let score = 0;
+  let prevMatchIdx = -1;
+  
+  for (let i = 0; i < text.length && patternIdx < pattern.length; i++) {
+    if (text[i] === pattern[patternIdx]) {
+      score += 1 + (i === prevMatchIdx + 1 ? 0.5 : 0);
+      prevMatchIdx = i;
+      patternIdx++;
+    }
+  }
+  
+  return patternIdx === pattern.length ? score : 0;
 }
 
 /**
@@ -1576,6 +1846,115 @@ document.addEventListener('click', async (e) => {
     return;
   }
   
+  // Stats toggle
+  if (e.target.id === 'statsToggle' || e.target.closest('#statsToggle')) {
+    enableStats = !enableStats;
+    await saveFeatureSettings();
+    updateFeatureToggles();
+    const statsPanel = document.getElementById('statsPanel');
+    if (statsPanel) {
+      if (enableStats) {
+        statsPanel.style.display = 'block';
+        await updateStats();
+        showToast(t('enableStats'));
+      } else {
+        statsPanel.style.display = 'none';
+      }
+    }
+    return;
+  }
+  
+  // Stats panel close
+  if (e.target.id === 'statsClose') {
+    document.getElementById('statsPanel').style.display = 'none';
+    return;
+  }
+  
+  // Pomodoro toggle
+  if (e.target.id === 'pomodoroToggle' || e.target.closest('#pomodoroToggle')) {
+    const pomodoroPanel = document.getElementById('pomodoroPanel');
+    if (pomodoroPanel) {
+      pomodoroPanel.style.display = pomodoroPanel.style.display === 'none' ? 'block' : 'none';
+      updatePomodoroDisplay();
+    }
+    return;
+  }
+  
+  // Pomodoro panel close
+  if (e.target.id === 'pomodoroClose') {
+    document.getElementById('pomodoroPanel').style.display = 'none';
+    return;
+  }
+  
+  // Pomodoro mode buttons
+  if (e.target.classList.contains('pomodoro-mode')) {
+    pomodoroMode = e.target.dataset.mode;
+    pomodoroTimeLeft = POMODORO_TIMES[pomodoroMode];
+    if (pomodoroRunning) {
+      clearInterval(pomodoroInterval);
+      pomodoroRunning = false;
+    }
+    document.querySelectorAll('.pomodoro-mode').forEach(btn => btn.classList.remove('active'));
+    e.target.classList.add('active');
+    updatePomodoroDisplay();
+    return;
+  }
+  
+  // Pomodoro start/reset buttons
+  if (e.target.id === 'pomodoroStart') {
+    if (pomodoroRunning) {
+      clearInterval(pomodoroInterval);
+      pomodoroRunning = false;
+      document.getElementById('pomodoroStart').textContent = t('start');
+    } else {
+      pomodoroInterval = setInterval(() => {
+        pomodoroTimeLeft--;
+        updatePomodoroDisplay();
+        if (pomodoroTimeLeft <= 0) {
+          clearInterval(pomodoroInterval);
+          pomodoroRunning = false;
+          if (pomodoroMode === 'work') {
+            pomodoroSessions++;
+            pomodoroTimeLeft = POMODORO_TIMES.work;
+            saveFeatureSettings();
+          } else {
+            pomodoroTimeLeft = POMODORO_TIMES[pomodoroMode];
+          }
+          document.getElementById('pomodoroStart').textContent = t('start');
+          updatePomodoroDisplay();
+        }
+      }, 1000);
+      pomodoroRunning = true;
+      document.getElementById('pomodoroStart').textContent = 'Pause';
+    }
+    return;
+  }
+  
+  if (e.target.id === 'pomodoroReset') {
+    clearInterval(pomodoroInterval);
+    pomodoroRunning = false;
+    pomodoroTimeLeft = POMODORO_TIMES[pomodoroMode];
+    document.getElementById('pomodoroStart').textContent = t('start');
+    updatePomodoroDisplay();
+    return;
+  }
+  
+  // Recently closed clear
+  if (e.target.id === 'clearRecentlyClosed') {
+    recentlyClosedTabs = [];
+    await saveFeatureSettings();
+    renderRecentlyClosed();
+    return;
+  }
+  
+  // Recently closed restore button
+  if (e.target.classList.contains('recent-item-restore')) {
+    const url = e.target.dataset.url;
+    const index = parseInt(e.target.dataset.index);
+    await restoreClosedTab(url, index);
+    return;
+  }
+  
   // Refresh button
   if (e.target.id === 'refreshBtn' || e.target.closest('#refreshBtn')) {
     await renderDashboard();
@@ -1625,12 +2004,23 @@ document.addEventListener('click', async (e) => {
   if (action === 'close-single-tab') {
     e.stopPropagation(); // don't trigger parent chip's focus-tab
     const tabUrl = actionEl.dataset.tabUrl;
+    const tabTitle = actionEl.dataset.tabTitle || 'Untitled';
     if (!tabUrl) return;
 
     // Close the tab in Chrome directly
     const allTabs = await chrome.tabs.query({});
     const match   = allTabs.find(t => t.url === tabUrl);
-    if (match) await chrome.tabs.remove(match.id);
+    if (match) {
+      // Add to recently closed before removing
+      if (enableStats) {
+        const domain = new URL(tabUrl).hostname;
+        recentlyClosedTabs.unshift({ url: tabUrl, title: tabTitle, closedAt: Date.now() });
+        if (recentlyClosedTabs.length > 20) recentlyClosedTabs.pop();
+        await saveFeatureSettings();
+        renderRecentlyClosed();
+      }
+      await chrome.tabs.remove(match.id);
+    }
     await fetchOpenTabs();
 
     playCloseSound();
@@ -1848,6 +2238,27 @@ document.addEventListener('click', (e) => {
 
 // ---- Archive search — filter archived items as user types ----
 document.addEventListener('input', async (e) => {
+  // Tab search
+  if (e.target.id === 'tabSearch') {
+    handleSearchInput(e.target.value);
+    const clearBtn = document.getElementById('searchClear');
+    if (clearBtn) {
+      clearBtn.style.display = e.target.value ? 'flex' : 'none';
+    }
+    return;
+  }
+  
+  // Search clear button
+  if (e.target.id === 'searchClear') {
+    const searchInput = document.getElementById('tabSearch');
+    if (searchInput) {
+      searchInput.value = '';
+      handleSearchInput('');
+      e.target.style.display = 'none';
+    }
+    return;
+  }
+  
   if (e.target.id !== 'archiveSearch') return;
 
   const q = e.target.value.trim().toLowerCase();
@@ -1898,7 +2309,10 @@ async function init() {
   }
   
   await loadSettings();
+  await loadFeatureSettings();
   updateLangUI();
+  updateFeatureToggles();
+  updateSearchPlaceholder();
   
   if (bgMode === 'bing') {
     await loadBingWallpaper();
@@ -1907,6 +2321,83 @@ async function init() {
   }
   
   await renderDashboard();
+  await renderRecentlyClosed();
+  if (enableStats) {
+    await updateStats();
+  }
 }
 
 init();
+
+// Tab preview on hover
+let previewTimeout = null;
+document.addEventListener('mouseover', async (e) => {
+  const chip = e.target.closest('.page-chip');
+  if (!chip) return;
+  
+  const tabUrl = chip.dataset.tabUrl;
+  if (!tabUrl || tabUrl.startsWith('chrome://') || tabUrl.startsWith('about:')) return;
+  
+  clearTimeout(previewTimeout);
+  previewTimeout = setTimeout(() => showTabPreview(chip), 300);
+});
+
+document.addEventListener('mouseout', async (e) => {
+  const chip = e.target.closest('.page-chip');
+  if (chip) {
+    clearTimeout(previewTimeout);
+    setTimeout(() => {
+      const preview = document.getElementById('tabPreview');
+      if (preview) preview.classList.remove('visible');
+    }, 200);
+  }
+});
+
+async function showTabPreview(chip) {
+  const tabUrl = chip.dataset.tabUrl;
+  const tabTitle = chip.querySelector('.chip-text')?.textContent || 'Untitled';
+  
+  const preview = document.getElementById('tabPreview');
+  if (!preview) return;
+  
+  try {
+    const url = new URL(tabUrl);
+    const domain = url.hostname;
+    
+    preview.innerHTML = `
+      <div class="tab-preview-content">
+        <div class="tab-preview-favicon">
+          <img src="https://www.google.com/s2/favicons?domain=${domain}&sz=64" onerror="this.style.display='none'" alt="">
+        </div>
+        <div class="tab-preview-info">
+          <div class="tab-preview-title">${tabTitle}</div>
+          <div class="tab-preview-url">${domain}</div>
+        </div>
+      </div>
+    `;
+  } catch {
+    preview.innerHTML = `
+      <div class="tab-preview-content">
+        <div class="tab-preview-title">${tabTitle}</div>
+      </div>
+    `;
+  }
+  
+  const rect = chip.getBoundingClientRect();
+  let x = rect.right + 10;
+  let y = rect.top;
+  
+  if (x + 280 > window.innerWidth) {
+    x = rect.left - 280 - 10;
+  }
+  if (y + 100 > window.innerHeight) {
+    y = window.innerHeight - 100 - 10;
+  }
+  
+  preview.style.left = x + 'px';
+  preview.style.top = y + 'px';
+  preview.style.width = '260px';
+  preview.style.height = 'auto';
+  preview.style.minHeight = '60px';
+  preview.classList.add('visible');
+}
