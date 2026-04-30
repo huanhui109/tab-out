@@ -35,6 +35,56 @@ The agent will walk you through it. Takes about 1 minute.
 
 ---
 
+## New Features (v1.1.0)
+
+### Background Themes
+- **Bing Wallpaper** - Daily automatic wallpaper from Bing with navigation to browse recent 8 images
+- **Custom Image** - Upload your own image from local files
+- **Auto theme extraction** - Automatically detects image colors and applies matching overlay transparency
+
+### Side Panel Mode
+- Use Tab Out as a side panel on any webpage
+- Right-click extension icon → "Open side panel"
+- Auto-refresh when new tabs are created or loaded
+
+### Bilingual Support
+- Switch between English and Chinese (中文)
+- All UI text fully localized
+
+### Apple-Inspired Design
+- Modern, clean interface with glassmorphism effects
+- Smooth animations and hover effects
+- System font stack (SF Pro on Mac, Segoe UI on Windows)
+
+---
+
+## Background Modes
+
+Tab Out supports three background modes:
+
+1. **None (Default)** - Clean solid color background
+2. **Bing Wallpaper** - Daily automatic wallpaper from Bing (click arrows to browse recent 8 images)
+3. **Custom Image** - Upload your own image from local files
+
+The extension automatically extracts the dominant color from your background image and applies a subtle overlay to ensure text remains readable.
+
+---
+
+## Side Panel Mode
+
+Tab Out can work as a side panel on any webpage:
+
+1. Right-click the Tab Out extension icon in Chrome
+2. Select "Open side panel"
+3. Tab Out will appear as a narrow sidebar on the right side of your current page
+
+Features:
+- Manual refresh button to update tab list
+- Auto-refresh when new tabs are created or pages finish loading
+- Optimized layout for narrow sidebar width
+
+---
+
 ## Manual Setup
 
 **1. Clone the repo**
@@ -79,6 +129,7 @@ Everything runs inside the Chrome extension. No external server, no API calls, n
 | Storage | chrome.storage.local |
 | Sound | Web Audio API (synthesized, no files) |
 | Animations | CSS transitions + JS confetti particles |
+| Background | Bing HPImageArchive API + Canvas color extraction |
 
 ---
 

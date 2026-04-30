@@ -17,6 +17,345 @@
 
 
 /* ----------------------------------------------------------------
+   INTERNATIONALIZATION — Language Support
+   ---------------------------------------------------------------- */
+
+const i18n = {
+  en: {
+    greetingMorning: 'Good morning',
+    greetingAfternoon: 'Good afternoon',
+    greetingEvening: 'Good evening',
+    rightNow: 'Right now',
+    openTabs: 'Open tabs',
+    savedForLater: 'Saved for later',
+    closeAll: 'Close all',
+    tabs: 'tabs',
+    tab: 'tab',
+    domain: 'domain',
+    domains: 'domains',
+    duplicate: 'duplicate',
+    duplicates: 'duplicates',
+    homepage: 'Homepages',
+    closeExtras: 'Close extras',
+    closeAllTabs: 'Close all',
+    emptyState: "Inbox zero, but for tabs.",
+    emptySubtitle: "You're free.",
+    nothingSaved: 'Nothing saved. Living in the moment.',
+    archive: 'Archive',
+    checkOff: 'Completed',
+    dismiss: 'Dismiss',
+    saved: 'Saved for later',
+    closed: 'Tab closed',
+    closedMultiple: 'Closed',
+    from: 'from',
+    allTabsClosed: 'All tabs closed. Fresh start.',
+    closedDupes: 'Closed duplicates, kept one copy each',
+    closeDuplicates: 'Close duplicates',
+    tabOutDupes: 'You have',
+    tabOutDupesEnd: 'Tab Out tabs open. Keep just this one?',
+    bingWallpaper: 'Bing Wallpaper',
+    localFiles: 'Local Files',
+    closedExtraTabOut: 'Closed extra Tab Out tabs',
+    failedToSave: 'Failed to save tab',
+    openTabsLabel: 'Open tabs',
+    bgApplied: 'Background applied',
+    bingPrev: 'Previous',
+    bingNext: 'Next',
+  },
+  zh: {
+    greetingMorning: '早上好',
+    greetingAfternoon: '下午好',
+    greetingEvening: '晚上好',
+    rightNow: '当前',
+    openTabs: '打开的标签页',
+    savedForLater: '稍后阅读',
+    closeAll: '关闭全部',
+    tabs: '个标签',
+    tab: '个标签',
+    domain: '个网站',
+    domains: '个网站',
+    duplicate: '重复',
+    duplicates: '个重复',
+    homepage: '首页',
+    closeExtras: '关闭其他',
+    closeAllTabs: '关闭全部',
+    emptyState: '标签归零， inbox 清空。',
+    emptySubtitle: '你自由了。',
+    nothingSaved: '没有保存的标签。活在当下。',
+    archive: '归档',
+    checkOff: '已完成',
+    dismiss: '忽略',
+    saved: '已保存',
+    closed: '标签已关闭',
+    closedMultiple: '已关闭',
+    from: '来自',
+    allTabsClosed: '所有标签已关闭。新的开始。',
+    closedDupes: '已关闭重复标签，保留一份',
+    closeDuplicates: '关闭重复',
+    tabOutDupes: '你有',
+    tabOutDupesEnd: '个 Tab Out 标签页打开。保留这一个？',
+    bingWallpaper: '必应壁纸',
+    localFiles: '本地文件',
+    closedExtraTabOut: '已关闭其他 Tab Out 标签',
+    failedToSave: '保存标签失败',
+    openTabsLabel: '打开的标签页',
+    bgApplied: '背景已应用',
+    bingPrev: '上一张',
+    bingNext: '下一张',
+  }
+};
+
+let currentLang = 'en';
+let bgMode = 'none';
+let customBgData = null;
+let bingImages = [];
+let currentBingIndex = 0;
+
+function t(key) {
+  return i18n[currentLang][key] || key;
+}
+
+async function loadSettings() {
+  try {
+    const { lang, bgMode: savedBgMode, customBg } = await chrome.storage.local.get(['lang', 'bgMode', 'customBg']);
+    currentLang = lang || 'en';
+    bgMode = savedBgMode || 'none';
+    customBgData = customBg || null;
+  } catch {}
+}
+
+async function saveSettings() {
+  try {
+    await chrome.storage.local.set({ 
+      lang: currentLang, 
+      bgMode: bgMode,
+      customBg: customBgData 
+    });
+  } catch {}
+}
+
+function updateLangUI() {
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === currentLang);
+  });
+  document.querySelectorAll('.bg-mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.bgMode === bgMode);
+  });
+  
+  const bingNav = document.getElementById('bingNav');
+  if (bingNav) {
+    bingNav.style.display = bgMode === 'bing' ? 'flex' : 'none';
+    updateBingNavInfo();
+  }
+}
+
+function updateBingNavInfo() {
+  const infoEl = document.getElementById('bingNavInfo');
+  const prevBtn = document.getElementById('bingPrevBtn');
+  const nextBtn = document.getElementById('bingNextBtn');
+  
+  if (infoEl && bingImages.length > 0) {
+    infoEl.textContent = `${currentBingIndex + 1}/${bingImages.length}`;
+  }
+  if (prevBtn) {
+    prevBtn.classList.toggle('disabled', currentBingIndex === 0);
+  }
+  if (nextBtn) {
+    nextBtn.classList.toggle('disabled', currentBingIndex >= bingImages.length - 1);
+  }
+}
+
+async function loadBingWallpaper() {
+  if (bgMode !== 'bing') return;
+  
+  try {
+    console.log('[tab-out] Loading Bing wallpaper...');
+    
+    const bingUrl = `https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=8&mkt=zh-CN`;
+    
+    const response = await fetch(bingUrl, {
+      method: 'GET',
+      mode: 'cors',
+      credentials: 'omit'
+    });
+    
+    if (!response.ok) {
+      console.error('[tab-out] Bing API error:', response.status, response.statusText);
+      return;
+    }
+    
+    const data = await response.json();
+    console.log('[tab-out] Bing data:', data);
+    
+    if (data.images && data.images.length > 0) {
+      bingImages = data.images.map(img => ({
+        url: 'https://www.bing.com' + img.urlbase + '_1920x1080.jpg',
+        title: img.title || img.copyright || ''
+      }));
+      
+      currentBingIndex = await chrome.storage.local.get('bingIndex').then(r => r.bingIndex || 0);
+      if (currentBingIndex >= bingImages.length) currentBingIndex = 0;
+      
+      applyBingImage(currentBingIndex);
+      console.log('[tab-out] Bing wallpaper loaded, total:', bingImages.length);
+    } else {
+      console.warn('[tab-out] No images in Bing response');
+    }
+  } catch (e) {
+    console.error('[tab-out] Failed to load Bing wallpaper:', e);
+  }
+}
+
+function applyBingImage(index) {
+  if (!bingImages[index]) return;
+  
+  const imageUrl = bingImages[index].url;
+  document.body.classList.add('has-bg-image');
+  document.body.style.setProperty('--bg-image', `url(${imageUrl})`);
+  
+  currentBingIndex = index;
+  chrome.storage.local.set({ bingIndex: index });
+  
+  updateBingNavInfo();
+  extractThemeColor(imageUrl);
+}
+
+function prevBingImage() {
+  if (currentBingIndex > 0) {
+    applyBingImage(currentBingIndex - 1);
+  }
+}
+
+function nextBingImage() {
+  if (currentBingIndex < bingImages.length - 1) {
+    applyBingImage(currentBingIndex + 1);
+  }
+}
+
+async function loadCustomBackground() {
+  if (bgMode !== 'custom' || !customBgData) return;
+  
+  try {
+    document.body.classList.add('has-bg-image');
+    document.body.style.setProperty('--bg-image', `url(${customBgData})`);
+    
+    await extractThemeColor(customBgData);
+    console.log('[tab-out] Custom background loaded');
+  } catch (e) {
+    console.error('[tab-out] Failed to load custom background:', e);
+  }
+}
+
+function clearBackground() {
+  document.body.classList.remove('has-bg-image');
+  document.body.style.removeProperty('--bg-image');
+  resetThemeColor();
+}
+
+async function extractThemeColor(imageUrl) {
+  try {
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = imageUrl;
+    });
+    
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    const scale = Math.min(100 / img.width, 100 / img.height);
+    canvas.width = img.width * scale;
+    canvas.height = img.height * scale;
+    
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    
+    let r = 0, g = 0, b = 0, count = 0;
+    
+    for (let i = 0; i < data.length; i += 4) {
+      const brightness = (data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000;
+      if (brightness > 30 && brightness < 220) {
+        r += data[i];
+        g += data[i + 1];
+        b += data[i + 2];
+        count++;
+      }
+    }
+    
+    if (count > 0) {
+      r = Math.round(r / count);
+      g = Math.round(g / count);
+      b = Math.round(b / count);
+      
+      const isLight = (r * 299 + g * 587 + b * 114) / 1000 > 128;
+      
+      document.body.style.setProperty('--theme-r', r);
+      document.body.style.setProperty('--theme-g', g);
+      document.body.style.setProperty('--theme-b', b);
+      
+      const overlayOpacity = isLight ? 0.85 : 0.75;
+      document.body.style.setProperty('--bg-overlay', `rgba(${r}, ${g}, ${b}, ${overlayOpacity})`);
+      
+      console.log('[tab-out] Theme color extracted, overlay updated:', { r, g, b, isLight, overlayOpacity });
+    }
+  } catch (e) {
+    console.warn('[tab-out] Failed to extract theme color:', e);
+  }
+}
+
+function resetThemeColor() {
+  document.body.style.removeProperty('--theme-r');
+  document.body.style.removeProperty('--theme-g');
+  document.body.style.removeProperty('--theme-b');
+  document.body.style.setProperty('--bg-overlay', 'rgba(248, 245, 240, 0.88)');
+}
+
+async function handleCustomImageUpload(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    customBgData = e.target.result;
+    await saveSettings();
+    
+    bgMode = 'custom';
+    await saveSettings();
+    updateLangUI();
+    
+    await loadCustomBackground();
+    showToast(t('bgApplied'));
+  };
+  reader.readAsDataURL(file);
+}
+
+function setBgMode(mode) {
+  bgMode = mode;
+  saveSettings();
+  updateLangUI();
+  
+  if (mode === 'none') {
+    clearBackground();
+  } else if (mode === 'bing') {
+    loadBingWallpaper();
+  } else if (mode === 'custom') {
+    loadCustomBackground();
+  }
+}
+
+function switchLanguage(lang) {
+  currentLang = lang;
+  saveSettings();
+  updateLangUI();
+  renderDashboard();
+}
+
+
+/* ----------------------------------------------------------------
    CHROME TABS — Direct API Access
 
    Since this page IS the extension's new tab page, it has full
@@ -461,13 +800,13 @@ function checkAndShowEmptyState() {
           <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
         </svg>
       </div>
-      <div class="empty-title">Inbox zero, but for tabs.</div>
-      <div class="empty-subtitle">You're free.</div>
+      <div class="empty-title">${t('emptyState')}</div>
+      <div class="empty-subtitle">${t('emptySubtitle')}</div>
     </div>
   `;
 
   const countEl = document.getElementById('openTabsSectionCount');
-  if (countEl) countEl.textContent = '0 domains';
+  if (countEl) countEl.textContent = '0 ' + t('domains');
 }
 
 /**
@@ -496,9 +835,9 @@ function timeAgo(dateStr) {
  */
 function getGreeting() {
   const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
+  if (hour < 12) return t('greetingMorning');
+  if (hour < 17) return t('greetingAfternoon');
+  return t('greetingEvening');
 }
 
 /**
@@ -696,7 +1035,7 @@ function smartTitle(title, url) {
    SVG ICON STRINGS
    ---------------------------------------------------------------- */
 const ICONS = {
-  tabs:    `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8.25V18a2.25 2.25 0 0 0 2.25 2.25h13.5A2.25 2.25 0 0 0 21 18V8.25m-18 0V6a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 6v2.25m-18 0h18" /></svg>`,
+  tabs:    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none"><rect x="4" y="4" width="24" height="6" rx="2" fill="currentColor"/><rect x="4" y="11" width="20" height="6" rx="2" fill="currentColor" opacity="0.7"/><rect x="4" y="18" width="16" height="6" rx="2" fill="currentColor" opacity="0.4"/></svg>`,
   close:   `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>`,
   archive: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5m6 4.125l2.25 2.25m0 0l2.25 2.25M12 13.875l2.25-2.25M12 13.875l-2.25 2.25M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" /></svg>`,
   focus:   `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 19.5 15-15m0 0H8.25m11.25 0v11.25" /></svg>`,
@@ -742,10 +1081,13 @@ function checkTabOutDupes() {
   const tabOutTabs = openTabs.filter(t => t.isTabOut);
   const banner  = document.getElementById('tabOutDupeBanner');
   const countEl = document.getElementById('tabOutDupeCount');
+  const cleanupText = document.getElementById('tabCleanupText');
+  const cleanupBtn = document.getElementById('tabCleanupBtn');
   if (!banner) return;
 
   if (tabOutTabs.length > 1) {
-    if (countEl) countEl.textContent = tabOutTabs.length;
+    if (cleanupText) cleanupText.innerHTML = `${t('tabOutDupes')} <strong>${tabOutTabs.length}</strong> ${t('tabOutDupesEnd')}`;
+    if (cleanupBtn) cleanupBtn.textContent = t('closeExtras');
     banner.style.display = 'flex';
   } else {
     banner.style.display = 'none';
@@ -815,12 +1157,12 @@ function renderDomainCard(group) {
 
   const tabBadge = `<span class="open-tabs-badge">
     ${ICONS.tabs}
-    ${tabCount} tab${tabCount !== 1 ? 's' : ''} open
+    ${tabCount} ${tabCount === 1 ? t('tab') : t('tabs')} ${t('openTabs').toLowerCase()}
   </span>`;
 
   const dupeBadge = hasDupes
     ? `<span class="open-tabs-badge" style="color:var(--accent-amber);background:rgba(200,113,58,0.08);">
-        ${totalExtras} duplicate${totalExtras !== 1 ? 's' : ''}
+        ${totalExtras} ${totalExtras === 1 ? t('duplicate') : t('duplicates')}
       </span>`
     : '';
 
@@ -882,7 +1224,7 @@ function renderDomainCard(group) {
       <div class="status-bar"></div>
       <div class="mission-content">
         <div class="mission-top">
-          <span class="mission-name">${isLanding ? 'Homepages' : (group.label || friendlyDomain(group.domain))}</span>
+          <span class="mission-name">${isLanding ? t('homepage') : (group.label || friendlyDomain(group.domain))}</span>
           ${tabBadge}
           ${dupeBadge}
         </div>
@@ -916,6 +1258,8 @@ async function renderDeferredColumn() {
   const archiveEl      = document.getElementById('deferredArchive');
   const archiveCountEl = document.getElementById('archiveCount');
   const archiveList    = document.getElementById('archiveList');
+  const deferredTitle  = document.getElementById('deferredTitle');
+  const archiveToggleText = document.getElementById('archiveToggleText');
 
   if (!column) return;
 
@@ -930,6 +1274,10 @@ async function renderDeferredColumn() {
 
     column.style.display = 'block';
 
+    // Update titles
+    if (deferredTitle) deferredTitle.textContent = t('savedForLater');
+    if (archiveToggleText) archiveToggleText.textContent = t('archive');
+
     // Render active checklist items
     if (active.length > 0) {
       countEl.textContent = `${active.length} item${active.length !== 1 ? 's' : ''}`;
@@ -940,6 +1288,7 @@ async function renderDeferredColumn() {
       list.style.display = 'none';
       countEl.textContent = '';
       empty.style.display = 'block';
+      empty.textContent = t('nothingSaved');
     }
 
     // Render archive section
@@ -1149,8 +1498,10 @@ async function renderStaticDashboard() {
   const openTabsSectionTitle = document.getElementById('openTabsSectionTitle');
 
   if (domainGroups.length > 0 && openTabsSection) {
-    if (openTabsSectionTitle) openTabsSectionTitle.textContent = 'Open tabs';
-    openTabsSectionCount.innerHTML = `${domainGroups.length} domain${domainGroups.length !== 1 ? 's' : ''} &nbsp;&middot;&nbsp; <button class="action-btn close-tabs" data-action="close-all-open-tabs" style="font-size:11px;padding:3px 10px;">${ICONS.close} Close all ${realTabs.length} tabs</button>`;
+    if (openTabsSectionTitle) openTabsSectionTitle.textContent = t('openTabs');
+    const domainText = domainGroups.length === 1 ? t('domain') : t('domains');
+    const tabText = realTabs.length === 1 ? t('tab') : t('tabs');
+    openTabsSectionCount.innerHTML = `${domainGroups.length} ${domainText} &nbsp;&middot;&nbsp; <button class="action-btn close-tabs" data-action="close-all-open-tabs" style="font-size:11px;padding:3px 10px;">${ICONS.close} ${t('closeAll')} ${realTabs.length} ${tabText}</button>`;
     openTabsMissionsEl.innerHTML = domainGroups.map(g => renderDomainCard(g)).join('');
     openTabsSection.style.display = 'block';
   } else if (openTabsSection) {
@@ -1159,7 +1510,9 @@ async function renderStaticDashboard() {
 
   // --- Footer stats ---
   const statTabs = document.getElementById('statTabs');
+  const statLabel = document.getElementById('statLabel');
   if (statTabs) statTabs.textContent = openTabs.length;
+  if (statLabel) statLabel.textContent = t('openTabsLabel');
 
   // --- Check for duplicate Tab Out tabs ---
   checkTabOutDupes();
@@ -1182,6 +1535,53 @@ async function renderDashboard() {
    ---------------------------------------------------------------- */
 
 document.addEventListener('click', async (e) => {
+  // Language switch buttons
+  const langBtn = e.target.closest('.lang-btn');
+  if (langBtn) {
+    const lang = langBtn.dataset.lang;
+    if (lang) {
+      switchLanguage(lang);
+    }
+    return;
+  }
+  
+  // Background mode toggle buttons
+  const bgModeBtn = e.target.closest('.bg-mode-btn');
+  if (bgModeBtn) {
+    const mode = bgModeBtn.dataset.bgMode;
+    if (mode === 'custom') {
+      document.getElementById('customBgInput').click();
+    } else if (mode) {
+      setBgMode(mode);
+    }
+    return;
+  }
+  
+  // Custom background file input
+  if (e.target.id === 'customBgInput') {
+    const file = e.target.files[0];
+    if (file) {
+      handleCustomImageUpload(file);
+    }
+    return;
+  }
+  
+  // Bing navigation buttons
+  if (e.target.id === 'bingPrevBtn') {
+    prevBingImage();
+    return;
+  }
+  if (e.target.id === 'bingNextBtn') {
+    nextBingImage();
+    return;
+  }
+  
+  // Refresh button
+  if (e.target.id === 'refreshBtn' || e.target.closest('#refreshBtn')) {
+    await renderDashboard();
+    return;
+  }
+  
   // Walk up the DOM to find the nearest element with data-action
   const actionEl = e.target.closest('[data-action]');
   if (!actionEl) return;
@@ -1198,7 +1598,7 @@ document.addEventListener('click', async (e) => {
       banner.style.opacity = '0';
       setTimeout(() => { banner.style.display = 'none'; banner.style.opacity = '1'; }, 400);
     }
-    showToast('Closed extra Tab Out tabs');
+    showToast(t('closedExtraTabOut'));
     return;
   }
 
@@ -1260,7 +1660,7 @@ document.addEventListener('click', async (e) => {
     const statTabs = document.getElementById('statTabs');
     if (statTabs) statTabs.textContent = openTabs.length;
 
-    showToast('Tab closed');
+    showToast(t('closed'));
     return;
   }
 
@@ -1276,7 +1676,7 @@ document.addEventListener('click', async (e) => {
       await saveTabForLater({ url: tabUrl, title: tabTitle });
     } catch (err) {
       console.error('[tab-out] Failed to save tab:', err);
-      showToast('Failed to save tab');
+      showToast(t('failedToSave'));
       return;
     }
 
@@ -1295,7 +1695,7 @@ document.addEventListener('click', async (e) => {
       setTimeout(() => chip.remove(), 200);
     }
 
-    showToast('Saved for later');
+    showToast(t('saved'));
     await renderDeferredColumn();
     return;
   }
@@ -1368,8 +1768,9 @@ document.addEventListener('click', async (e) => {
     const idx = domainGroups.indexOf(group);
     if (idx !== -1) domainGroups.splice(idx, 1);
 
-    const groupLabel = group.domain === '__landing-pages__' ? 'Homepages' : (group.label || friendlyDomain(group.domain));
-    showToast(`Closed ${urls.length} tab${urls.length !== 1 ? 's' : ''} from ${groupLabel}`);
+    const groupLabel = group.domain === '__landing-pages__' ? t('homepage') : (group.label || friendlyDomain(group.domain));
+    const tabLabel = urls.length === 1 ? t('tab') : t('tabs');
+    showToast(`${t('closedMultiple')} ${urls.length} ${tabLabel} ${t('from')} ${groupLabel}`);
 
     const statTabs = document.getElementById('statTabs');
     if (statTabs) statTabs.textContent = openTabs.length;
@@ -1408,7 +1809,7 @@ document.addEventListener('click', async (e) => {
       card.classList.add('has-neutral-bar');
     }
 
-    showToast('Closed duplicates, kept one copy each');
+    showToast(t('closedDupes'));
     return;
   }
 
@@ -1428,7 +1829,7 @@ document.addEventListener('click', async (e) => {
       animateCardOut(c);
     });
 
-    showToast('All tabs closed. Fresh start.');
+    showToast(t('allTabsClosed'));
     return;
   }
 });
@@ -1479,4 +1880,33 @@ document.addEventListener('input', async (e) => {
 /* ----------------------------------------------------------------
    INITIALIZE
    ---------------------------------------------------------------- */
-renderDashboard();
+async function init() {
+  const isSidePanel = window.innerWidth < 600 || document.body.classList.contains('side-panel-mode');
+  
+  if (isSidePanel) {
+    document.body.classList.add('side-panel-mode');
+    
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      if (changeInfo.status === 'complete' && tab.url && !tab.url.startsWith('chrome://')) {
+        renderDashboard();
+      }
+    });
+    
+    chrome.tabs.onCreated.addListener((tab) => {
+      setTimeout(() => renderDashboard(), 500);
+    });
+  }
+  
+  await loadSettings();
+  updateLangUI();
+  
+  if (bgMode === 'bing') {
+    await loadBingWallpaper();
+  } else if (bgMode === 'custom') {
+    await loadCustomBackground();
+  }
+  
+  await renderDashboard();
+}
+
+init();

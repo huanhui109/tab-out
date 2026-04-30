@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tab Out</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,300;1,6..72,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      padding: 0;
+      overflow-x: hidden;
+    }
+    .container {
+      max-width: 100%;
+      padding: 16px;
+    }
+    header {
+      flex-direction: column;
+      gap: 8px;
+      padding-bottom: 12px;
+    }
+    .header-left h1 {
+      font-size: 18px;
+    }
+    .header-right {
+      width: 100%;
+      justify-content: space-between;
+    }
+    .bg-mode-switch, .lang-switch {
+      scale: 0.85;
+    }
+    .section-header {
+      margin-bottom: 12px;
+    }
+    .section-header h2 {
+      font-size: 14px;
+    }
+    .missions {
+      gap: 8px;
+    }
+    .mission-card {
+      padding: 10px;
+    }
+    .mission-card h3 {
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+    .mission-card .tab-list {
+      gap: 4px;
+    }
+    .tab-item {
+      padding: 6px 8px;
+      font-size: 11px;
+    }
+    .tab-item .tab-favicon {
+      width: 12px;
+      height: 12px;
+    }
+    .tab-item .tab-title {
+      max-width: 120px;
+    }
+    footer {
+      padding: 12px 0;
+      margin-top: 12px;
+    }
+    .stat-num {
+      font-size: 18px;
+    }
+    .stat-label {
+      font-size: 10px;
+    }
+    .tab-cleanup-banner {
+      padding: 10px;
+      margin-bottom: 12px;
+    }
+    .tab-cleanup-text {
+      font-size: 12px;
+    }
+    .tab-cleanup-btn {
+      padding: 6px 10px;
+      font-size: 11px;
+    }
+    .deferred-column {
+      margin-top: 16px;
+    }
+    footer {
+      justify-content: space-between;
+    }
+    .refresh-btn {
+      width: 28px;
+      height: 28px;
+    }
+    .refresh-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="header-left">
+      <h1 id="greeting"></h1>
+      <div class="date" id="dateDisplay"></div>
+    </div>
+    <div class="header-right">
+      <div class="lang-switch">
+        <button class="lang-btn active" data-lang="en">EN</button>
+        <button class="lang-btn" data-lang="zh">中文</button>
+      </div>
+      <div class="bg-mode-switch">
+        <button class="bg-mode-btn active" data-bg-mode="none" id="bgModeNone">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+        </button>
+        <button class="bg-mode-btn" data-bg-mode="bing" id="bgModeBing" title="Bing">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        </button>
+        <div class="bing-nav" id="bingNav" style="display:none">
+          <button class="bing-nav-btn" id="bingPrevBtn" title="Prev">←</button>
+          <span class="bing-nav-info" id="bingNavInfo">1/8</span>
+          <button class="bing-nav-btn" id="bingNextBtn" title="Next">→</button>
+        </div>
+        <button class="bg-mode-btn" data-bg-mode="custom" id="bgModeCustom" title="Upload">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        </button>
+        <input type="file" id="customBgInput" accept="image/*" style="display:none">
+      </div>
+    </div>
+  </header>
+
+  <div class="tab-cleanup-banner" id="tabOutDupeBanner" style="display:none">
+    <div class="tab-cleanup-left">
+      <div class="tab-cleanup-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+        </svg>
+      </div>
+      <div class="tab-cleanup-text" id="tabCleanupText">
+        You have <strong id="tabOutDupeCount"></strong> Tab Out tabs open. Keep just this one?
+      </div>
+    </div>
+    <button class="tab-cleanup-btn" data-action="close-tabout-dupes" id="tabCleanupBtn">Close extras</button>
+  </div>
+
+  <div class="active-section" id="openTabsSection" style="display:none">
+    <div class="section-header">
+      <h2 id="openTabsSectionTitle">Right now</h2>
+      <div class="section-line"></div>
+      <div class="section-count" id="openTabsSectionCount"></div>
+    </div>
+    <div class="missions" id="openTabsMissions"></div>
+  </div>
+
+  <div class="deferred-column" id="deferredColumn" style="display:none">
+    <div class="section-header">
+      <h2 id="deferredTitle">Saved for later</h2>
+      <div class="section-line"></div>
+      <div class="section-count" id="deferredCount"></div>
+    </div>
+    <div class="deferred-list" id="deferredList"></div>
+    <div class="deferred-empty" id="deferredEmpty" style="display:none">
+      Nothing saved. Living in the moment.
+    </div>
+  </div>
+
+  <footer>
+    <div class="footer-stats">
+      <div class="stat">
+        <div class="stat-num" id="statTabs">—</div>
+        <div class="stat-label" id="statLabel">Open tabs</div>
+      </div>
+    </div>
+    <button class="refresh-btn" id="refreshBtn" title="Refresh">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+    </button>
+  </footer>
+</div>
+
+<div class="toast" id="toast">
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+  </svg>
+  <span id="toastText"></span>
+</div>
+
+<script src="config.local.js" onerror="/* no personal config */"></script>
+<script src="app.js"></script>
+</body>
+</html>
